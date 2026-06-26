@@ -1,0 +1,27 @@
+{
+  "name": "pfm-pro-backend",
+  "version": "2.0.0",
+  "description": "Professional Poultry Farm Management System - Backend API",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "seed": "node seeds/seed.js"
+  },
+  "keywords": ["poultry", "farm", "management", "eggs", "production"],
+  "author": "Muhammad Nasir ",
+  "license": "MIT",
+  "dependencies": {
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "mongoose": "^8.0.4",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
