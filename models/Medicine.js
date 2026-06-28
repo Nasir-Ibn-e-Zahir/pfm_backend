@@ -59,7 +59,7 @@ const medicineSchema = new mongoose.Schema({
     required: [true, 'Expiry date is required'],
     validate: {
       validator: function(expiryDate) {
-        return expiryDate > this.purchaseDate;
+        return expiryDate < this.purchaseDate;
       },
       message: 'Expiry date must be after purchase date'
     }
