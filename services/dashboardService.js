@@ -54,9 +54,10 @@ const getDashboard = async (period = 'all') => {
       totalCulled += p.culledHens;
     });
     
-    // Sales stats - USING STACKS NOT CRATES
+    // Sales stats - USE totalEggsInSale for stock calculation
     let totalStacksSold = 0;
     let totalLooseEggsSold = 0;
+    let totalEggsSold = 0;
     let totalRevenue = 0;
     let totalPaid = 0;
     let totalDiscount = 0;
@@ -64,6 +65,7 @@ const getDashboard = async (period = 'all') => {
     sales.forEach(s => {
       totalStacksSold += s.stacksSold || 0;
       totalLooseEggsSold += s.looseEggsSold || 0;
+      totalEggsSold += s.totalEggsInSale || 0;
       totalRevenue += s.totalAmount;
       totalPaid += s.paidAmount;
       totalDiscount += s.discount || 0;
@@ -78,9 +80,8 @@ const getDashboard = async (period = 'all') => {
       expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + e.amount;
     });
     
-    // Current stock calculation - USING STACKS
-    const totalSoldEggs = (totalStacksSold * 360) + totalLooseEggsSold;
-    const currentStock = totalEggsProduced - totalSoldEggs - totalBrokenEggs;
+    // STOCK CALCULATION: Produced - Sold - Broken
+    const currentStock = totalEggsProduced - totalEggsSold - totalBrokenEggs;
     
     // Today's stats
     const todayStart = new Date();
@@ -98,10 +99,7 @@ const getDashboard = async (period = 'all') => {
     
     let todayEggs = todayProduction ? todayProduction.totalEggs : 0;
     let todayRevenue = 0;
-    
-    todaySales.forEach(s => {
-      todayRevenue += s.totalAmount;
-    });
+    todaySales.forEach(s => { todayRevenue += s.totalAmount; });
     
     const todayExpenses = await Expense.find({
       date: { $gte: todayStart, $lt: todayEnd }
@@ -111,28 +109,21 @@ const getDashboard = async (period = 'all') => {
     
     const todayProfit = todayRevenue - todayExpenseAmount;
     
-    // Production trend (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // Production trend (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
     const trendProductions = await DailyProduction.find({
-      date: { $gte: sevenDaysAgo }
+      date: { $gte: thirtyDaysAgo }
     }).sort({ date: 1 });
     
     const productionTrend = trendProductions.map(p => ({
       date: p.date,
-      eggs: p.totalEggs,
+      totalEggs: p.totalEggs,
       fcr: p.fcrPerHen,
       productionRate: p.productionRate,
-      change: p.productionChangePercent
+      diedHens: p.diedHens
     }));
-    
-    // Best and worst days
-    const bestDay = productions.length > 0 ? 
-      productions.reduce((max, p) => p.totalEggs > max.totalEggs ? p : max) : null;
-    
-    const worstDay = productions.length > 0 ?
-      productions.reduce((min, p) => p.totalEggs < min.totalEggs ? p : min) : null;
     
     // Averages
     const avgFCR = productions.length > 0 ? 
@@ -141,24 +132,32 @@ const getDashboard = async (period = 'all') => {
     const avgProductionRate = productions.length > 0 ?
       (productions.reduce((sum, p) => sum + p.productionRate, 0) / productions.length).toFixed(2) : 0;
     
-    // Profit calculation
+    // Best and worst days
+    const bestDay = productions.length > 0 ? 
+      productions.reduce((max, p) => p.totalEggs > max.totalEggs ? p : max) : null;
+    
+    const worstDay = productions.length > 0 ?
+      productions.reduce((min, p) => p.totalEggs < min.totalEggs ? p : min) : null;
+    
+    // Profit
     const grossProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(2) : 0;
     
     // Medicine alerts
     const lowStockMeds = await Medicine.find({ status: 'low_stock' });
     const expiredMeds = await Medicine.find({ status: 'expired' });
-    const expiringMeds = await Medicine.find({
-      expiryDate: {
-        $gte: new Date(),
-        $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      }
-    });
+    
+    console.log('📊 Dashboard Calculated:');
+    console.log('  Total Produced:', totalEggsProduced);
+    console.log('  Total Sold:', totalEggsSold);
+    console.log('  Total Broken:', totalBrokenEggs);
+    console.log('  Current Stock:', currentStock);
     
     return {
       overview: {
         totalBirds,
         totalEggsProduced,
+        totalEggsSold,
         currentStock,
         totalRevenue,
         totalPaid,
@@ -187,6 +186,7 @@ const getDashboard = async (period = 'all') => {
         totalRevenue,
         totalDiscount,
         totalStacksSold,
+        totalEggsSold,
       },
       expenses: {
         totalExpenses,
@@ -201,7 +201,6 @@ const getDashboard = async (period = 'all') => {
       alerts: {
         lowStockMeds: lowStockMeds.length,
         expiredMeds: expiredMeds.length,
-        expiringMeds: expiringMeds.length,
         lowStockMedsList: lowStockMeds,
         expiredMedsList: expiredMeds,
       }

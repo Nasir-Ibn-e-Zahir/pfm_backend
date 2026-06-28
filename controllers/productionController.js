@@ -49,6 +49,12 @@ const getProductionById = async (req, res, next) => {
       data: production
     });
   } catch (error) {
+    if (error.message === 'Production record not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
     next(error);
   }
 };
@@ -62,6 +68,12 @@ const updateProduction = async (req, res, next) => {
       message: 'Production record updated successfully'
     });
   } catch (error) {
+    if (error.message === 'Production record not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
     next(error);
   }
 };
@@ -74,6 +86,12 @@ const deleteProduction = async (req, res, next) => {
       message: 'Production record deleted successfully'
     });
   } catch (error) {
+    if (error.message === 'Production record not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
     next(error);
   }
 };

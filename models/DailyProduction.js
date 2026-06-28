@@ -152,85 +152,8 @@ const dailyProductionSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Pre-save middleware
-dailyProductionSchema.pre('save', async function(next) {
-  try {
-    // Calculate total eggs
-    this.totalEggs = (this.stacks * 360) + (this.crates * 30) + this.looseEggs;
-    
-    // Calculate good eggs
-    this.goodEggs = this.totalEggs - this.brokenEggs;
-    if (this.goodEggs < 0) this.goodEggs = 0;
-    
-    // Calculate total mortality
-    this.totalMortality = this.diedHens + this.culledHens;
-    
-    // Convert feed to grams
-    const conversions = {
-      'bags': this.feedQuantity * 50000,
-      'kg': this.feedQuantity * 1000,
-      'grams': this.feedQuantity,
-      'tons': this.feedQuantity * 1000000
-    };
-    this.feedInGrams = conversions[this.feedUnit] || 0;
-    
-    // Calculate total feed cost
-    this.totalFeedCost = this.feedQuantity * this.feedCostPerUnit;
-    
-    // Get total active birds
-    const Flock = mongoose.model('Flock');
-    const activeFlocks = await Flock.find({ status: 'active' });
-    let totalBirds = 0;
-    activeFlocks.forEach(flock => {
-      totalBirds += flock.currentBirds;
-    });
-    
-    // If no flocks, use farm initial hens
-    if (totalBirds === 0) {
-      const FarmSettings = mongoose.model('FarmSettings');
-      const settings = await FarmSettings.findOne();
-      totalBirds = settings ? settings.initialHens : 1000;
-    }
-    
-    // Calculate FCR and production rate
-    if (totalBirds > 0) {
-      this.fcrPerHen = parseFloat((this.feedInGrams / totalBirds).toFixed(2));
-      this.eggsPerHen = parseFloat((this.goodEggs / totalBirds).toFixed(4));
-      this.productionRate = parseFloat(((this.goodEggs / totalBirds) * 100).toFixed(2));
-      
-      if (this.productionRate > 100) this.productionRate = 100;
-    }
-    
-    // Compare with previous day
-    if (this.isNew || this.isModified('totalEggs')) {
-      const yesterday = new Date(this.date);
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(0, 0, 0, 0);
-      
-      const yesterdayEnd = new Date(yesterday);
-      yesterdayEnd.setHours(23, 59, 59, 999);
-      
-      const prevProduction = await this.constructor.findOne({
-        date: { $gte: yesterday, $lte: yesterdayEnd }
-      });
-      
-      if (prevProduction) {
-        this.previousDayEggs = prevProduction.totalEggs;
-        this.productionChange = this.totalEggs - prevProduction.totalEggs;
-        
-        if (prevProduction.totalEggs > 0) {
-          this.productionChangePercent = parseFloat(
-            ((this.productionChange / prevProduction.totalEggs) * 100).toFixed(2)
-          );
-        }
-      }
-    }
-    
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
+// NO PRE-SAVE MIDDLEWARE AT ALL
+// All calculations are handled in the service layer
 
 // Indexes
 dailyProductionSchema.index({ date: -1 });
