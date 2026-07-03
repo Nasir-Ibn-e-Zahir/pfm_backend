@@ -12,11 +12,6 @@ const dailyProductionSchema = new mongoose.Schema({
       message: 'Production date cannot be in the future'
     }
   },
-  flockId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Flock',
-    required: false
-  },
   stacks: {
     type: Number,
     default: 0,
@@ -45,11 +40,6 @@ const dailyProductionSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Broken eggs cannot be negative']
   },
-  doubleYolkEggs: {
-    type: Number,
-    default: 0,
-    min: [0, 'Double yolk eggs cannot be negative']
-  },
   goodEggs: {
     type: Number,
     default: 0,
@@ -63,23 +53,10 @@ const dailyProductionSchema = new mongoose.Schema({
   },
   feedUnit: {
     type: String,
-    enum: {
-      values: ['bags', 'kg', 'grams', 'tons'],
-      message: '{VALUE} is not a valid feed unit'
-    },
+    enum: ['bags', 'kg', 'grams', 'tons'],
     required: [true, 'Feed unit is required']
   },
   feedInGrams: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  feedCostPerUnit: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  totalFeedCost: {
     type: Number,
     default: 0,
     min: 0
@@ -111,37 +88,10 @@ const dailyProductionSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
-  eggsPerHen: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  previousDayEggs: {
-    type: Number,
-    default: 0
-  },
-  productionChange: {
-    type: Number,
-    default: 0
-  },
-  productionChangePercent: {
-    type: Number,
-    default: 0
-  },
   weather: {
     type: String,
     enum: ['sunny', 'cloudy', 'rainy', 'hot', 'cold', 'normal', 'windy', 'humid'],
     default: 'normal'
-  },
-  temperatureCelsius: {
-    type: Number,
-    min: [-10, 'Temperature too low'],
-    max: [50, 'Temperature too high']
-  },
-  humidityPercent: {
-    type: Number,
-    min: 0,
-    max: 100
   },
   notes: {
     type: String,
@@ -152,11 +102,50 @@ const dailyProductionSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// NO PRE-SAVE MIDDLEWARE AT ALL
-// All calculations are handled in the service layer
+// Pre-save for NEW records only
+dailyProductionSchema.pre('save', async function(next) {
+  if (!this.isNew) return next();
+  
+  try {
+    // Calculate total eggs
+    this.totalEggs = (this.stacks * 360) + (this.crates * 30) + this.looseEggs;
+    this.goodEggs = Math.max(0, this.totalEggs - this.brokenEggs);
+    this.totalMortality = this.diedHens + this.culledHens;
+    
+    // Convert feed to grams
+    const conversions = {
+      'bags': this.feedQuantity * 50000,
+      'kg': this.feedQuantity * 1000,
+      'grams': this.feedQuantity,
+      'tons': this.feedQuantity * 1000000
+    };
+    this.feedInGrams = conversions[this.feedUnit] || 0;
+    
+    // Get active birds from FarmSettings
+    const FarmSettings = mongoose.model('FarmSettings');
+    const settings = await FarmSettings.findOne();
+    const totalBirds = settings ? settings.initialHens : 1000;
+    
+    // Calculate FCR
+    if (totalBirds > 0) {
+      this.fcrPerHen = parseFloat((this.feedInGrams / totalBirds).toFixed(2));
+      this.productionRate = parseFloat(((this.goodEggs / totalBirds) * 100).toFixed(2));
+      if (this.productionRate > 100) this.productionRate = 100;
+    }
+    
+    // SUBTRACT died hens from FarmSettings initialHens
+    if (settings && this.totalMortality > 0) {
+      settings.initialHens = Math.max(0, settings.initialHens - this.totalMortality);
+      await settings.save();
+      console.log(`✅ FarmSettings updated: -${this.totalMortality} birds, remaining: ${settings.initialHens}`);
+    }
+    
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
-// Indexes
 dailyProductionSchema.index({ date: -1 });
-dailyProductionSchema.index({ flockId: 1, date: -1 });
 
 module.exports = mongoose.model("DailyProduction", dailyProductionSchema);
